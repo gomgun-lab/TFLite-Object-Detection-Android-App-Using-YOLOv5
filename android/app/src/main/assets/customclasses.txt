@@ -1,3 +1,4 @@
-apple
-banana
-
+block(point type)
+block(line type)
+crosswalk
+bollard
