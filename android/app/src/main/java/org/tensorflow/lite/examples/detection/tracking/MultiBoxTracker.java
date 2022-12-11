@@ -24,11 +24,18 @@ import android.graphics.Paint.Cap;
 import android.graphics.Paint.Join;
 import android.graphics.Paint.Style;
 import android.graphics.RectF;
+import android.speech.tts.TextToSpeech;
 import android.text.TextUtils;
+import android.util.Log;
 import android.util.Pair;
 import android.util.TypedValue;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Queue;
 import org.tensorflow.lite.examples.detection.env.BorderedText;
 import org.tensorflow.lite.examples.detection.env.ImageUtils;
@@ -68,6 +75,12 @@ public class MultiBoxTracker {
   private int frameHeight;
   private int sensorOrientation;
 
+  private long lastTimeStamp = 0;
+  private long curTimeStamp = 0;
+
+  private TextToSpeech tts;
+  private HashMap<String, String> map = new HashMap<String, String>();
+
   public MultiBoxTracker(final Context context) {
     for (final int color : COLORS) {
       availableColors.add(color);
@@ -84,6 +97,21 @@ public class MultiBoxTracker {
             TypedValue.applyDimension(
                     TypedValue.COMPLEX_UNIT_DIP, TEXT_SIZE_DIP, context.getResources().getDisplayMetrics());
     borderedText = new BorderedText(textSizePx);
+
+    tts = new TextToSpeech(context, new TextToSpeech.OnInitListener() {
+      @Override
+      public void onInit(int status) {
+        if (status == TextToSpeech.SUCCESS) {
+          int result = tts.setLanguage(Locale.KOREA);
+          if (result == TextToSpeech.LANG_NOT_SUPPORTED || result == TextToSpeech.LANG_MISSING_DATA) {
+            Log.e("TTS", "Language not supported.");
+          } else {
+          }
+        } else {
+          Log.e("TTS", "Init failed..");
+        }
+      }
+    });
   }
 
   public synchronized void setFrameConfiguration(
@@ -149,9 +177,36 @@ public class MultiBoxTracker {
                       : String.format("%.2f", (100 * recognition.detectionConfidence));
       //            borderedText.drawText(canvas, trackedPos.left + cornerSize, trackedPos.top,
       // labelString);
+
+//      final String labelTime = Long.toString(curTimeStamp) + " / " + Long.toString(lastTimeStamp);
+      
       borderedText.drawText(
-              canvas, trackedPos.left + cornerSize, trackedPos.top, labelString + "%", boxPaint);
+                canvas, trackedPos.left + cornerSize, trackedPos.top, labelString + "%", boxPaint);
+
+      map.get(recognition.title);
     }
+
+    if (curTimeStamp - lastTimeStamp > 200) {
+      tts.setPitch((float)1.0);
+      tts.setSpeechRate((float)2.0);
+
+      Iterator<String> keys = map.keySet().iterator();
+      String text = "전방 1.5m 이내에 ";
+
+      while(keys.hasNext()) {
+        String key = keys.next();
+        text += key;
+      }
+
+      text += "물체가 인식되었습니다.";
+
+      tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "uid");
+
+      lastTimeStamp = curTimeStamp;
+      map.clear();
+    }
+
+    curTimeStamp++;
   }
 
   private void processResults(final List<Recognition> results) {
