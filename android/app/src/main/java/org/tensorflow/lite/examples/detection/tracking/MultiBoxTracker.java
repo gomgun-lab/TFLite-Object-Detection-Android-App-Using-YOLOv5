@@ -37,6 +37,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Queue;
+import java.lang.Math;
 import org.tensorflow.lite.examples.detection.env.BorderedText;
 import org.tensorflow.lite.examples.detection.env.ImageUtils;
 import org.tensorflow.lite.examples.detection.env.Logger;
@@ -79,7 +80,7 @@ public class MultiBoxTracker {
   private long curTimeStamp = 0;
 
   private TextToSpeech tts;
-  private HashMap<String, String> map = new HashMap<String, String>();
+  private HashMap<String, Float> map = new HashMap<String, Float>();
 
   public MultiBoxTracker(final Context context) {
     for (final int color : COLORS) {
@@ -171,19 +172,60 @@ public class MultiBoxTracker {
       float cornerSize = Math.min(trackedPos.width(), trackedPos.height()) / 8.0f;
       canvas.drawRoundRect(trackedPos, cornerSize, cornerSize, boxPaint);
 
+      float w1 = recognition.location.width();
+      float h1 = recognition.location.height();
+      float w;
+      float h;
+      float distance;
+      String s1 = String.format(recognition.title);
+      if (s1.equals("bollards") == true) {
+        w = 430f;
+        h = 98f;
+      } else if (s1.equals("crosswalks") == true) {
+        w = 380f;
+        h = 718f;
+      } else {
+        w = 112f;
+        h = 154f;
+      }
+      if (Math.abs(w - w1) > Math.abs(h - h1)) {
+        distance = (h / h1);
+      } else {
+        distance = (w / w1);
+      }
+
       final String labelString =
               !TextUtils.isEmpty(recognition.title)
-                      ? String.format("%s %.2f", recognition.title, (100 * recognition.detectionConfidence))
-                      : String.format("%.2f", (100 * recognition.detectionConfidence));
-      //            borderedText.drawText(canvas, trackedPos.left + cornerSize, trackedPos.top,
-      // labelString);
+                      ? String.format("%s %.2f%% %.2fm ", recognition.title, (100 * recognition.detectionConfidence), distance)
+                      : String.format("%.2f%% %.2fm ", (100 * recognition.detectionConfidence), distance);
 
-//      final String labelTime = Long.toString(curTimeStamp) + " / " + Long.toString(lastTimeStamp);
-      
       borderedText.drawText(
-                canvas, trackedPos.left + cornerSize, trackedPos.top, labelString + "%", boxPaint);
+              canvas, trackedPos.left + cornerSize, trackedPos.top, labelString, boxPaint);
 
-      map.get(recognition.title);
+      String nameKor = "";
+
+      if(recognition.title.equals("crosswalks")) {
+        nameKor = "횡단보도";
+      } else if (recognition.title.equals("bollards")) {
+        nameKor = "볼라드";
+      } else if (recognition.title.equals("block(point type)")) {
+        nameKor = "점자블록";
+      } else  if (recognition.title.equals("block(line type)")) {
+        nameKor = "점자블록";
+      }
+
+      boolean isKeyExists = map.containsKey(nameKor);
+
+      if (distance <= 1.5) {
+        if (isKeyExists) {
+          float lastDectectedDistance = map.get(nameKor);
+          if (lastDectectedDistance > distance) {
+            map.put(nameKor, distance);
+          }
+        } else {
+          map.put(nameKor, distance);
+        }
+      }
     }
 
     if (curTimeStamp - lastTimeStamp > 200) {
@@ -199,6 +241,10 @@ public class MultiBoxTracker {
       }
 
       text += "물체가 인식되었습니다.";
+
+      if(map.size() == 0) {
+        text = "";
+      }
 
       tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "uid");
 
@@ -252,9 +298,6 @@ public class MultiBoxTracker {
       trackedRecognition.color = COLORS[potential.second.getDetectedClass() % COLORS.length];
       trackedObjects.add(trackedRecognition);
 
-//      if (trackedObjects.size() >= COLORS.length) {
-//        break;
-//      }
     }
   }
 
